@@ -34,7 +34,7 @@ class GermanTheme:
 
     def get_genres(self) -> str:
         genres = self.movieDetails.get("Genre", "NULL")
-        genres = [x.strip() for x in genres.split("/")]
+        genres = [x.strip() for x in genres.split(",")]
 
         genres_id = [{"id": self.get_genre_id(genre.strip())} for genre in genres]
 
@@ -64,7 +64,7 @@ class GermanTheme:
             "type": self.movieType,
             "duration": self.runtime.replace("min", "").strip(),
             "year": 0,
-            "quality": self.movieDetails.get("Auflösung", "HD"),
+            "quality": self.movieDetails.get("Auflösung", "Source"),
             "other_name": self.movieTitle,
             "nation": self.movieDetails.get("Das Land", "USA"),
             "director": self.get_director_or_cast(key="Regisseur"),
@@ -162,11 +162,14 @@ class GermanTheme:
             table="episode", condition=f"movie_id={movieId}", data=(movieId, data)
         )
 
-        if episode_data[0][2].decode() != data:
+        compare_data = episode_data[0][2]
+        if isinstance(compare_data, bytes):
+            compare_data = compare_data.decode()
+        if compare_data != data:
             print("Diff")
             database.update_table(
                 table="episode",
-                set_cond=f"data={data}",
+                set_cond=f"data='{data}'",
                 where_cond=f"movie_id={movieId}",
             )
 

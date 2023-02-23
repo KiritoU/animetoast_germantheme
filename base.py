@@ -9,37 +9,31 @@ from german_theme import GermanTheme
 from helper import helper
 from settings import CONFIG
 
-logging.basicConfig(format="%(asctime)s %(levelname)s:%(message)s", level=logging.INFO)
-
 
 class Crawler:
-    def crawl_soup(self, url):
-        logging.info(f"Crawling {url}")
-        html = helper.download_url(url)
-        if html.status_code == 404:
-            return 404
-
-        soup = BeautifulSoup(html.content, "html.parser")
-
-        return soup
-
-    def crawl_movie(self, movieTitle: str, movieHref: str) -> None:
+    def crawl_anime(self, anime_href: str) -> None:
         try:
-            soup = self.crawl_soup(movieHref)
+            soup = helper.crawl_soup(anime_href)
 
-            coverUrl = helper.get_cover_img_url(soup, movieHref)
-            descriptore = helper.get_descriptore(soup, movieHref)
-            runtime = helper.get_runtime(soup, movieHref)
-            trailerBox = helper.get_trailer_url(soup, movieHref)
-            movieType, movieEpisodes = helper.get_movie_type_and_episodes(
-                soup, movieHref
+            title = helper.get_title(soup, anime_href)
+
+            item_content = soup.find("div", class_="item-content")
+            cover_url, descriptore = helper.get_cover_img_url_and_description(
+                item_content, anime_href
             )
 
-            movieDetails = helper.get_movie_details(soup, movieHref)
+            runtime = helper.get_runtime(item_content, anime_href)
+            trailerBox = helper.get_trailer_url(item_content, anime_href)
+
+            movieType, movieEpisodes = helper.get_movie_type_and_episodes(
+                item_content, anime_href
+            )
+
+            movieDetails = helper.get_movie_details(item_content, anime_href)
 
             GermanTheme(
-                movieTitle=movieTitle,
-                coverUrl=coverUrl,
+                movieTitle=title,
+                coverUrl=cover_url,
                 runtime=runtime,
                 descriptore=descriptore,
                 trailerBox=trailerBox,
@@ -50,55 +44,63 @@ class Crawler:
 
         except Exception as e:
             helper.log(
-                f"Failed to crawl_movie\n{movieHref}\n{e}",
+                f"Failed to crawl_movie\n{anime_href}\n{e}",
                 log_file="base.crawl_page.log",
             )
 
-    def crawl_page(self, pageUrl: str, isHomePage: bool = True) -> bool:
-        soup = self.crawl_soup(url=pageUrl)
+    def crawl_anime_from_item(self, item: BeautifulSoup) -> None:
+        href = ""
+        thumbnail_src = ""
+
+        item_thumbnail = item.find("div", class_="item-thumbnail")
+        if item_thumbnail.find("a"):
+            href = item_thumbnail.find("a").get("href")
+
+        if item_thumbnail.find("img"):
+            thumbnail_src = item_thumbnail.find("img").get("src")
+
+        if not href:
+            item_head = item.find("div", class_="item-head")
+            if item_head.find("a"):
+                href = item_head.find("a").get("href")
+
+        self.crawl_anime(anime_href=href)
+        # print([href, thumbnail_src])
+
+    def crawl_page(self, page_url: str, is_home_page: bool = False) -> bool:
+        soup = helper.crawl_soup(url=page_url)
         if soup == 404:
             return False
 
-        moduleContents = soup.find_all("div", class_="ModuleContent")
+        if is_home_page:
+            smart_box_content = soup.find("div", class_="smart-box-content")
+            rows = smart_box_content.find_all("div", class_="row")
+            for row in rows:
+                video_items = row.find_all("div", class_="video-item")
+                for video_item in video_items:
+                    self.crawl_anime_from_item(item=video_item)
 
-        if isHomePage and len(moduleContents) < 2:
-            return False
+        else:
+            search_listing_content = soup.find("div", class_="search-listing-content")
+            if not search_listing_content:
+                print("No search listing content")
+                return False
 
-        moduleContent = moduleContents[0]
-        if isHomePage:
-            moduleContent = moduleContents[1]
-
-        shortEntrys = moduleContent.find_all("div", class_="short-entry")
-
-        if not shortEntrys:
-            return False
-
-        for shortEntry in shortEntrys:
-            try:
-                shortEntryTitle = shortEntry.find("div", class_="short-entry-title")
-                aElement = shortEntryTitle.find("a")
-                movieHref = aElement.get("href")
-                movieTitle = aElement.text
-
-                self.crawl_movie(movieTitle=movieTitle, movieHref=movieHref)
-            except Exception as e:
-                helper.log(
-                    f"Failed to crawl shortEntryTitle\n{e}\n{shortEntry}",
-                    log_file="base.crawl_page.log",
-                )
+            rows = search_listing_content.find_all("div", class_="row")
+            for row in rows:
+                self.crawl_anime_from_item(item=row)
 
         return True
 
 
 if __name__ == "__main__":
-    # Crawler().crawl_page(CONFIG.KINOXTOP_HOMEPAGE)
+    x = Crawler().crawl_page(CONFIG.ANIMETOAST_HOMEPAGE, is_home_page=True)
+    # x = Crawler().crawl_page(CONFIG.ANIMETOAST_SEARCHPAGE.format(1), is_home_page=False)
+    print(x)
 
     # Crawler().crawl_movie(
-    #     movieTitle="Gib den Jungs zwei Küsse Stream",
-    #     movieHref="https://kinox.top/12515-gib-den-jungs-zwei-kusse-stream.html",
+    #     movie_href="https://www.animetoast.cc/tomo-chan-wa-onnanoko-ger-sub/",
     # )
-
-    Crawler().crawl_movie(
-        movieTitle="Anbieter Auswahl für: The Last of Us - Staffel 1",
-        movieHref="https://kinox.top/12526-the-last-of-us.html",
-    )
+    # Crawler().crawl_movie(
+    #     movie_href="https://www.animetoast.cc/tensei-oujo-to-tensai-reijou-no-mahou-kakumei-ger-sub/",
+    # )
