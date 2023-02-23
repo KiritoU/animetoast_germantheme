@@ -53,10 +53,10 @@ class Crawler:
         thumbnail_src = ""
 
         item_thumbnail = item.find("div", class_="item-thumbnail")
-        if item_thumbnail.find("a"):
+        if item_thumbnail and item_thumbnail.find("a"):
             href = item_thumbnail.find("a").get("href")
 
-        if item_thumbnail.find("img"):
+        if item_thumbnail and item_thumbnail.find("img"):
             thumbnail_src = item_thumbnail.find("img").get("src")
 
         if not href:
